@@ -5,6 +5,8 @@ import {
     createActionHeaders,
     createPostResponse,
     ActionError,
+    LinkedAction,
+    ActionParameterSelectable,
   } from "@solana/actions";
   
   import {
@@ -41,35 +43,50 @@ import {
   
   // GET request: Provide metadata about the Rock Paper Scissors game
   export const GET = async (req: Request) => {
-    const requestUrl = new URL(req.url);
+    // Define the action with radio button parameters
+    const actions: LinkedAction[] = [
+      {
+        type: "transaction",
+        label: "Play Rock Paper Scissors",
+        href: "/api/actions/memo?choice={choice}",
+        parameters: [
+          {
+            name: "choice",
+            label: "Choose your move",
+            type: "radio",
+            required: true,
+            options: [
+              {
+                label: "Rock",
+                value: "rock",
+                selected: true,
+              },
+              {
+                label: "Paper",
+                value: "paper",
+              },
+              {
+                label: "Scissors",
+                value: "scissors",
+              },
+            ],
+          } as ActionParameterSelectable<"radio">,
+        ],
+      },
+    ];
+  
     const payload: ActionGetResponse = {
       type: "action",
       title: "Rock Paper Scissors",
-      icon: new URL("https://www.finsmes.com/wp-content/uploads/2022/10/Shardeum.png").toString(),
+      icon: new URL(
+        "https://andygrunwald.com/images/posts/playing-rock-paper-scissors-with-500-people/rock-paper-scissors-game-rules.png"
+      ).toString(),
       description: "Play a Rock Paper Scissors game against a bot!",
       label: "Choose your move",
-      links: {
-        actions: [
-          {
-            label: "Rock",
-            href: "/api/actions/memo?choice=rock",
-            type: "transaction",
-          },
-          {
-            label: "Paper",
-            href: "/api/actions/memo?choice=paper",
-            type: "transaction",
-          },
-          {
-            label: "Scissors",
-            href: "/api/actions/memo?choice=scissors",
-            type: "transaction",
-          },
-        ],
-      },
+      links: { actions },
     };
   
-    return Response.json(payload, { headers });
+    return new Response(JSON.stringify(payload), { headers });
   };
   
   // OPTIONS request to handle CORS preflight requests
