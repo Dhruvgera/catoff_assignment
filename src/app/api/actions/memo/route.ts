@@ -1,170 +1,184 @@
 import {
-    ActionGetResponse,
-    ActionPostRequest,
-    ActionPostResponse,
-    createActionHeaders,
-    createPostResponse,
-    ActionError,
-    LinkedAction,
-    ActionParameterSelectable,
-  } from "@solana/actions";
-  
-  import {
-    clusterApiUrl,
-    Connection,
-    PublicKey,
-    Transaction,
-    SystemProgram,
-    LAMPORTS_PER_SOL,
-  } from "@solana/web3.js";
-  import fetch from 'node-fetch';
-  import { DEFAULT_SOL_ADDRESS } from "./const";
-  // Create the standard headers for this route (including CORS)
-  const headers = createActionHeaders();
-  
-  // Helper function to get a random move for the bot
-  const getRandomMove = (): string => {
-    const choices = ["rock", "paper", "scissors"];
-    return choices[Math.floor(Math.random() * choices.length)];
+  ActionGetResponse,
+  ActionPostRequest,
+  ActionPostResponse,
+  createActionHeaders,
+  createPostResponse,
+  ActionError,
+  LinkedAction,
+  ActionParameterSelectable,
+  ActionParameter,
+} from "@solana/actions";
+
+import {
+  clusterApiUrl,
+  Connection,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
+import fetch from 'node-fetch';
+import { DEFAULT_SOL_ADDRESS } from "./const"; 
+
+// Define a list of correct answers for the game
+const CORRECT_ANSWERS = [
+  "Solana",
+  "Blockchain",
+  "Smart Contract",
+  "DeFi",
+  "NFT",
+  "Validator",
+  "Token",
+  "Wallet",
+  "Mint",
+  "Transaction",
+];
+
+// Create the standard headers for this route (including CORS)
+const headers = createActionHeaders();
+
+const getRandomAnswer = (): string => {
+  return CORRECT_ANSWERS[Math.floor(Math.random() * CORRECT_ANSWERS.length)];
+};
+
+// GET request: Provide metadata about the Family Feud-like game
+export const GET = async (req: Request) => {
+  const actions: LinkedAction[] = [
+    {
+      type: "transaction",
+      label: "Submit Your Guess",
+      href: "/api/actions/memo?guess={guess}&wager={wager}",
+      parameters: [
+        {
+          name: "guess",
+          label: "Your Guess",
+          type: "text",
+          required: true,
+          pattern: "^[a-zA-Z ]+$",
+          patternDescription: "Only letters and spaces are allowed.",
+        } as ActionParameter<"text">,
+        {
+          name: "wager",
+          label: "Wager Amount (SOL)",
+          type: "number",
+          required: true,
+          min: 0.001,
+          max: 10,
+          pattern: "^[0-9]*\\.?[0-9]+$",
+          patternDescription: "Enter a valid SOL amount between 0.001 and 10.",
+        } as ActionParameter<"number">,
+      ],
+    },
+  ];
+
+  const payload: ActionGetResponse = {
+    type: "action",
+    title: "Family Feud: Solana Edition",
+    icon: new URL(
+      "https://mspteambuilding.ca/wp-content/uploads/2023/09/Family-Feud-MSP-Teambuilding-1.png"
+    ).toString(),
+    description: "Guess the correct answer and win SOL! Enter your wager and guess below.",
+    label: "Submit Your Guess",
+    links: { actions },
   };
-  
-  // Helper function to determine the result of the game
-  const getGameResult = (playerMove: string, botMove: string): string => {
-    if (playerMove === botMove) return "draw";
-    if (
-      (playerMove === "rock" && botMove === "scissors") ||
-      (playerMove === "paper" && botMove === "rock") ||
-      (playerMove === "scissors" && botMove === "paper")
-    ) {
-      return "win";
+
+  return new Response(JSON.stringify(payload), { headers });
+};
+
+// OPTIONS request to handle CORS preflight requests
+export const OPTIONS = async () => Response.json(null, { headers });
+
+// POST request: Process the user's wager and guess, calculate the result, and create a transaction
+export const POST = async (req: Request) => {
+  try {
+    const postRequest: ActionPostRequest = await req.json();
+    const account = new PublicKey(postRequest.account);
+    const requestUrl = new URL(req.url);
+    const userGuess = requestUrl.searchParams.get("guess");
+    const wagerStr = requestUrl.searchParams.get("wager");
+    const wager = parseFloat(wagerStr || "0");
+
+    // Validate wager amount
+    if (isNaN(wager) || wager < 0.001 || wager > 10) {
+      throw new Error("Invalid wager amount. Must be between 0.001 and 10 SOL.");
     }
-    return "lose";
-  };
-  
-  // GET request: Provide metadata about the Rock Paper Scissors game
-  export const GET = async (req: Request) => {
-    // Define the action with radio button parameters
-    const actions: LinkedAction[] = [
-      {
-        type: "transaction",
-        label: "Play Rock Paper Scissors",
-        href: "/api/actions/memo?choice={choice}",
-        parameters: [
-          {
-            name: "choice",
-            label: "Choose your move",
-            type: "radio",
-            required: true,
-            options: [
-              {
-                label: "Rock",
-                value: "rock",
-                selected: true,
-              },
-              {
-                label: "Paper",
-                value: "paper",
-              },
-              {
-                label: "Scissors",
-                value: "scissors",
-              },
-            ],
-          } as ActionParameterSelectable<"radio">,
-        ],
-      },
-    ];
-  
-    const payload: ActionGetResponse = {
-      type: "action",
-      title: "Rock Paper Scissors",
-      icon: new URL(
-        "https://andygrunwald.com/images/posts/playing-rock-paper-scissors-with-500-people/rock-paper-scissors-game-rules.png"
-      ).toString(),
-      description: "Play a Rock Paper Scissors game against a bot!",
-      label: "Choose your move",
-      links: { actions },
-    };
-  
-    return new Response(JSON.stringify(payload), { headers });
-  };
-  
-  // OPTIONS request to handle CORS preflight requests
-  export const OPTIONS = async () => Response.json(null, { headers });
-  
-  // POST request: Process the player's move, calculate the result, and create a transaction
-  export const POST = async (req: Request) => {
-    try {
-      const postRequest: ActionPostRequest = await req.json();
-      const account = new PublicKey(postRequest.account);
-      const requestUrl = new URL(req.url);
-      const playerChoice = requestUrl.searchParams.get("choice");
-  
-      if (!playerChoice || !["rock", "paper", "scissors"].includes(playerChoice)) {
-        throw new Error("Invalid choice");
-      }
-  
-      // Generate the bot's move and determine the game result
-      const botMove = getRandomMove();
-      const result = getGameResult(playerChoice, botMove);
-      console.log(`Player: ${playerChoice}, Bot: ${botMove}, Result: ${result}`);
-  
-      // Create a connection to the Solana devnet
-      const connection = new Connection(clusterApiUrl("devnet"));
-  
-      // Get the latest blockhash for transaction
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-  
-      // Decide on transaction amount based on result (winner gets a token prize)
-      let lamports = 0;
-      if (result === "win") {
-        lamports = 0.001 * LAMPORTS_PER_SOL; // Example prize of 0.001 SOL
-      }
-  
-      // Create a transaction to either transfer tokens to the player or log the game
-      const transaction = new Transaction({
-        feePayer: account,
-        blockhash,
-        lastValidBlockHeight,
+
+    // Validate user's guess
+    if (!userGuess || !/^[a-zA-Z ]+$/.test(userGuess)) {
+      throw new Error("Invalid guess. Only letters and spaces are allowed.");
+    }
+
+    // Generate the correct answer 
+    const correctAnswer = getRandomAnswer().toLowerCase();
+    const normalizedGuess = userGuess.trim().toLowerCase();
+
+    const isCorrect = normalizedGuess === correctAnswer;
+
+    console.log(`User Guess: ${normalizedGuess}, Correct Answer: ${correctAnswer}, Result: ${isCorrect ? "Win" : "Lose"}`);
+
+    // Create a connection to the Solana devnet
+    const connection = new Connection(clusterApiUrl("devnet"));
+
+    // Get the latest blockhash for transaction
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+
+    // Initialize transaction
+    const transaction = new Transaction({
+      feePayer: account,
+      blockhash,
+      lastValidBlockHeight,
+    });
+
+    if (isCorrect) {
+      // User wins: Transfer the wager amount back as a reward (e.g., double the wager)
+      const rewardLamports = wager * 2 * LAMPORTS_PER_SOL;
+
+      const rewardTransfer = SystemProgram.transfer({
+        fromPubkey: DEFAULT_SOL_ADDRESS, 
+        toPubkey: account,
+        lamports: rewardLamports,
       });
-  
-      // Add a memo instruction (using transfer of 1 lamport as a placeholder)
-      const memoInstruction = SystemProgram.transfer({
+      transaction.add(rewardTransfer);
+    } else {
+      // User loses: Transfer the wager amount to the defined address
+      const lossLamports = wager * LAMPORTS_PER_SOL;
+
+      const lossTransfer = SystemProgram.transfer({
         fromPubkey: account,
-        toPubkey: DEFAULT_SOL_ADDRESS, // Replace with actual recipient if needed
-        lamports: 1, // 1 lamport to create a valid instruction
+        toPubkey: DEFAULT_SOL_ADDRESS, 
+        lamports: lossLamports,
       });
-      transaction.add(memoInstruction);
-  
-      if (lamports > 0) {
-        // Only if the player wins, add an additional transfer for the prize
-        const prizeTransfer = SystemProgram.transfer({
-          fromPubkey: account,
-          toPubkey: account, // Sending prize back to the player's account
-          lamports,
-        });
-        transaction.add(prizeTransfer);
-      }
-  
-      // Create the POST response for the signable transaction
-      const postResponse: ActionPostResponse = await createPostResponse({
-        fields: {
-          type: "transaction",
-          transaction,
-          message: `You chose ${playerChoice}, bot chose ${botMove}. Result: ${result}`,
-        },
-      });
-  
-      return Response.json(postResponse, { headers });
-    } catch (error) {
-      console.error("Error processing POST request:", error);
-      const actionError: ActionError = {
-        message: "An error occurred while processing your request.",
-      };
-      return Response.json(actionError, {
-        status: 400,
-        headers,
-      });
+      transaction.add(lossTransfer);
     }
-  };
-  
+
+    const memoInstruction = SystemProgram.transfer({
+      fromPubkey: account,
+      toPubkey: DEFAULT_SOL_ADDRESS,
+      lamports: 0, 
+    });
+    transaction.add(memoInstruction);
+
+    // Create the POST response for the signable transaction
+    const postResponse: ActionPostResponse = await createPostResponse({
+      fields: {
+        type: "transaction",
+        transaction,
+        message: isCorrect
+          ? `Congratulations! Your guess "${userGuess}" is correct. You've won ${wager * 2} SOL!`
+          : `Sorry, your guess "${userGuess}" is incorrect. You have lost ${wager} SOL.`,
+      },
+    });
+
+    return Response.json(postResponse, { headers });
+  } catch (error) {
+    console.error("Error processing POST request:", error);
+    const actionError: ActionError = {
+      message: error instanceof Error ? error.message : "An unexpected error occurred.",
+    };
+    return Response.json(actionError, {
+      status: 400,
+      headers,
+    });
+  }
+};
