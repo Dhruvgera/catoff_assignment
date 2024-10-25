@@ -6,7 +6,6 @@ import {
   createPostResponse,
   ActionError,
   LinkedAction,
-  ActionParameterSelectable,
   ActionParameter,
 } from "@solana/actions";
 
@@ -18,37 +17,49 @@ import {
   SystemProgram,
   LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
+import { v4 as uuidv4 } from 'uuid'; 
 import fetch from 'node-fetch';
 import { DEFAULT_SOL_ADDRESS } from "./const"; 
 
-// Define a list of correct answers for the game
-const CORRECT_ANSWERS = [
-  "Solana",
-  "Blockchain",
-  "Smart Contract",
-  "DeFi",
-  "NFT",
-  "Validator",
-  "Token",
-  "Wallet",
-  "Mint",
-  "Transaction",
-];
 
-// Create the standard headers for this route (including CORS)
+const QUESTIONS: { [key: string]: string[] } = {
+  "What is the underlying blockchain technology for this game?": ["Solana", "SOL"],
+  "Name a popular decentralized finance platform.": ["DeFi", "Decentralized Finance"],
+  "What digital asset represents ownership on the blockchain?": ["NFT", "Non-Fungible Token"],
+  "What program executes smart contracts on Solana?": ["Smart Contract", "Contracts"],
+  "What is a common wallet type for storing cryptocurrencies?": ["Wallet", "Crypto Wallet"],
+  "What is the native token of the Solana blockchain?": ["SOL"],
+  "What do validators do in a blockchain network?": ["Validator", "Block Validator"],
+  "What process records transactions on the blockchain?": ["Transaction", "Tx"],
+  "What is the process of creating new tokens called?": ["Mint", "Token Minting"],
+  "What is a unit of account used in Solana?": ["Lamport", "Lamports"],
+};
+
+const questionStore: Map<string, string[]> = new Map();
 const headers = createActionHeaders();
 
-const getRandomAnswer = (): string => {
-  return CORRECT_ANSWERS[Math.floor(Math.random() * CORRECT_ANSWERS.length)];
+// Helper function to get a random question and its ID
+const getRandomQuestion = (): { questionId: string; question: string; answers: string[] } => {
+  const questionEntries = Object.entries(QUESTIONS);
+  const randomIndex = Math.floor(Math.random() * questionEntries.length);
+  const [question, answers] = questionEntries[randomIndex];
+  const questionId = uuidv4(); 
+
+  questionStore.set(questionId, answers);
+
+  return { questionId, question, answers };
 };
 
 // GET request: Provide metadata about the Family Feud-like game
 export const GET = async (req: Request) => {
+
+  const { questionId, question, answers } = getRandomQuestion();
+
   const actions: LinkedAction[] = [
     {
       type: "transaction",
       label: "Submit Your Guess",
-      href: "/api/actions/memo?guess={guess}&wager={wager}",
+      href: `/api/actions/memo?questionId=${questionId}&guess={guess}&wager={wager}`,
       parameters: [
         {
           name: "guess",
@@ -78,7 +89,7 @@ export const GET = async (req: Request) => {
     icon: new URL(
       "https://mspteambuilding.ca/wp-content/uploads/2023/09/Family-Feud-MSP-Teambuilding-1.png"
     ).toString(),
-    description: "Guess the correct answer and win SOL! Enter your wager and guess below.",
+    description: `**Question:** ${question}\n\nGuess the correct answer and win SOL! Enter your wager and guess below.`,
     label: "Submit Your Guess",
     links: { actions },
   };
@@ -97,6 +108,7 @@ export const POST = async (req: Request) => {
     const requestUrl = new URL(req.url);
     const userGuess = requestUrl.searchParams.get("guess");
     const wagerStr = requestUrl.searchParams.get("wager");
+    const questionId = requestUrl.searchParams.get("questionId");
     const wager = parseFloat(wagerStr || "0");
 
     // Validate wager amount
@@ -109,13 +121,27 @@ export const POST = async (req: Request) => {
       throw new Error("Invalid guess. Only letters and spaces are allowed.");
     }
 
-    // Generate the correct answer 
-    const correctAnswer = getRandomAnswer().toLowerCase();
+    // Validate questionId
+    if (!questionId) {
+      throw new Error("Missing questionId.");
+    }
+
+    // Retrieve the possible answers for the given questionId from the store
+    const possibleAnswers = questionStore.get(questionId);
+
+    if (!possibleAnswers) {
+      throw new Error("Invalid questionId or question has expired.");
+    }
+
     const normalizedGuess = userGuess.trim().toLowerCase();
 
-    const isCorrect = normalizedGuess === correctAnswer;
+    const isCorrect = possibleAnswers.some(
+      (answer) => answer.toLowerCase() === normalizedGuess
+    );
 
-    console.log(`User Guess: ${normalizedGuess}, Correct Answer: ${correctAnswer}, Result: ${isCorrect ? "Win" : "Lose"}`);
+    console.log(
+      `Question ID: ${questionId}, User Guess: "${normalizedGuess}", Correct: ${isCorrect ? "Yes" : "No"}, Possible Answers: [${possibleAnswers.join(", ")}]`
+    );
 
     // Create a connection to the Solana devnet
     const connection = new Connection(clusterApiUrl("devnet"));
@@ -131,11 +157,11 @@ export const POST = async (req: Request) => {
     });
 
     if (isCorrect) {
-      // User wins: Transfer the wager amount back as a reward (e.g., double the wager)
+      // User wins: Transfer double the wager amount as a reward
       const rewardLamports = wager * 2 * LAMPORTS_PER_SOL;
 
       const rewardTransfer = SystemProgram.transfer({
-        fromPubkey: DEFAULT_SOL_ADDRESS, 
+        fromPubkey: new PublicKey("cuZFBDnPSt5J7Limwm37RedRWpNVs1xNR8XQDtWDMiN"), 
         toPubkey: account,
         lamports: rewardLamports,
       });
@@ -154,7 +180,7 @@ export const POST = async (req: Request) => {
 
     const memoInstruction = SystemProgram.transfer({
       fromPubkey: account,
-      toPubkey: DEFAULT_SOL_ADDRESS,
+      toPubkey: DEFAULT_SOL_ADDRESS, // Replace if needed
       lamports: 0, 
     });
     transaction.add(memoInstruction);
@@ -165,8 +191,8 @@ export const POST = async (req: Request) => {
         type: "transaction",
         transaction,
         message: isCorrect
-          ? `Congratulations! Your guess "${userGuess}" is correct. You've won ${wager * 2} SOL!`
-          : `Sorry, your guess "${userGuess}" is incorrect. You have lost ${wager} SOL.`,
+          ? `🎉 Congratulations! Your guess "${userGuess}" is correct. You've won ${wager * 2} SOL!`
+          : `😞 Sorry, your guess "${userGuess}" is incorrect. You have lost ${wager} SOL.`,
       },
     });
 
