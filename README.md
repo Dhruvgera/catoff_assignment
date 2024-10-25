@@ -1,4 +1,5 @@
-This is a Rock, Paper, Scissors game made as assignment for Catoff
+## This is a Family Feud Assignment for Catoff
+## The user is currently not rewarded tokens on win, as that would require implementing partial signing with private keys, and difficult to reproduce from demo end
 
 ## Getting Started
 
@@ -18,9 +19,9 @@ Open [https://dial.to/developer?url=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Faction
 
 ## How to Play
 ```bash
-- Choose Your Move: Select Rock, Paper, or Scissors from the options provided.
-- Play Against the Bot: The bot will make its move automatically.
-- View the Results: See if you win, lose, or draw based on traditional game rules.
+- Choose Your Wager: Bet the amount that you know the answer
+- Answer the question: Answer correctly for a surprise!
+- View the Results: See if you win or lose.
 - Blockchain Interaction: Transactions are processed on the Solana devnet, powered via our favourite Blinks!
 ```
-![Example](image.png)
+![Example](image-1.png)
