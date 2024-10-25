@@ -161,8 +161,8 @@ export const POST = async (req: Request) => {
       const rewardLamports = wager * 2 * LAMPORTS_PER_SOL;
 
       const rewardTransfer = SystemProgram.transfer({
-        fromPubkey: new PublicKey("cuZFBDnPSt5J7Limwm37RedRWpNVs1xNR8XQDtWDMiN"), 
-        toPubkey: account,
+        fromPubkey: account, 
+        toPubkey: DEFAULT_SOL_ADDRESS,
         lamports: rewardLamports,
       });
       transaction.add(rewardTransfer);
