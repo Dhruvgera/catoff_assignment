@@ -1,5 +1,5 @@
 ## This is a Family Feud Assignment for Catoff
-## The user is currently not rewarded tokens on win, as that would require implementing partial signing with private keys, and difficult to reproduce from demo end
+## Please add your JSON secret key into the .env and a hosted DB url for the blink to work! 
 
 ## Getting Started
 
